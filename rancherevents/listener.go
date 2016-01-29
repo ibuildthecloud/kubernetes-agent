@@ -18,10 +18,18 @@ func ConnectToEventStream(conf config.Config) error {
 	}
 	ph := PingHandler{}
 
+	svch := ServiceHandler{
+		kClient: kClient,
+	}
+
 	eventHandlers := map[string]revents.EventHandler{
 		"compute.instance.providelabels": sh.Handler,
 		"config.update":                  ph.Handler,
 		"ping":                           ph.Handler,
+		"service.create":                 svch.Handler,
+		"service.activate":               svch.Handler,
+		"service.deactivate":             svch.Handler,
+		"service.remove":                 svch.Handler,
 	}
 
 	router, err := revents.NewEventRouter("", 0, conf.CattleURL, conf.CattleAccessKey, conf.CattleSecretKey, nil, eventHandlers, "", conf.WorkerCount)
@@ -148,6 +156,35 @@ type PingHandler struct {
 }
 
 func (h *PingHandler) Handler(event *revents.Event, cli *client.RancherClient) error {
+	reply := newReply(event)
+	if reply.Name == "" {
+		return nil
+	}
+	err := publishReply(reply, cli)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type ServiceHandler struct {
+	kClient *kubernetesclient.Client
+}
+
+func (h *ServiceHandler) getNameSpace(event *revents.Event, cli *client.RancherClient) string {
+	data := event.Data
+	if _, ok := data["service"]; ok {
+		return "alena"
+	}
+	return ""
+}
+
+func (svch *ServiceHandler) Handler(event *revents.Event, cli *client.RancherClient) error {
+	log.Infof("Received event: Name: %s, Event Id: %s, Resource Id: %s", event.Name, event.Id, event.ResourceId)
+
+	nameSpace := svch.getNameSpace(event, cli)
+	log.Infof("Namespace %s", nameSpace)
+
 	reply := newReply(event)
 	if reply.Name == "" {
 		return nil
