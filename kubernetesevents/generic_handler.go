@@ -113,12 +113,15 @@ func (h *GenericHandler) add(selectorMap map[string]interface{}, metadata *model
 	fields := map[string]interface{}{"template": event.Object}
 	data := map[string]interface{}{"fields": fields}
 
+	rancherUuid, _ := metadata.Labels["io.rancher.uuid"].(string)
+
 	service := client.Service{
 		Kind:              kind,
 		Name:              metadata.Name,
 		ExternalId:        metadata.Uid,
 		SelectorContainer: selector,
 		Data:              data,
+		Uuid:              rancherUuid,
 	}
 	serviceEvent.Service = service
 
@@ -134,6 +137,8 @@ func (h *GenericHandler) add(selectorMap map[string]interface{}, metadata *model
 		}
 		env["name"] = namespace.Metadata.Name
 		env["externalId"] = "kubernetes://" + namespace.Metadata.Uid
+		rancherUuid, _ := namespace.Metadata.Labels["io.rancher.uuid"].(string)
+		env["uuid"] = rancherUuid
 	}
 	serviceEvent.Environment = env
 

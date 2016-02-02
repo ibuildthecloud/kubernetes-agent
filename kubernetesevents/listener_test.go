@@ -1,10 +1,9 @@
 package kubernetesevents
 
 import (
+	"gopkg.in/check.v1"
 	"testing"
 	"time"
-
-	"gopkg.in/check.v1"
 
 	"github.com/rancher/go-rancher/client"
 	"github.com/rancher/kubernetes-model/model"
