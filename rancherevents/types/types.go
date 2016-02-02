@@ -5,12 +5,10 @@ type Service struct {
 	UUID            string                 `json:"uuid"`
 	Kind            string                 `json:"kind"`
 	Stack           Stack                  `json:"environment"`
-	Selector        string                 `json:"selector"`
-	ExternalIPs     []string               `json:"externalIpAddresses"`
+	Selector        string                 `json:"selectorContainer"`
 	Data            map[string]interface{} `json:"data"`
-	LoadBalancerIP  string                 `json:"loadBalancerIP"`
 	SessionAffinity string                 `json:"SessionAffinity"`
-	ClusterIP       string                 `json:"clusterIP"`
+	ClusterIP       string                 `json:"vip"`
 	Type            string                 `json:"serviceType"`
 }
 

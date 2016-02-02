@@ -43,7 +43,7 @@ func (h *ServiceCreateHandler) createKubernetesNameSpace(stack types.Stack) erro
 	_, err := h.kClient.Namespace.ByName(stack.Name)
 	if err != nil {
 		namespace := &model.Namespace{
-			Metadata: &model.ObjectMeta{Name: stack.Name, Labels: map[string]interface{}{
+			Metadata: &model.ObjectMeta{Name: strings.ToLower(stack.Name), Labels: map[string]interface{}{
 				"io.rancher.uuid": stack.UUID,
 			}},
 		}
@@ -109,9 +109,21 @@ func getServicePorts(service *types.Service) []model.ServicePort {
 }
 
 func getServiceSelector(service *types.Service) map[string]interface{} {
-	selector := map[string]interface{}{}
-	//FIXME - populate selector
-	return selector
+	kSelector := map[string]interface{}{}
+	if service.Selector == "" {
+		return kSelector
+	}
+	selector := strings.TrimSpace(service.Selector)
+	splitted := strings.SplitN(selector, "=", 2)
+	// only equality based selectors are supported
+	if splitted[1] == "" || strings.HasSuffix(splitted[0], "!") {
+		log.Infof("selector is none %s", selector)
+		return kSelector
+	}
+	kSelector[strings.TrimSpace(splitted[0])] = strings.TrimSpace(splitted[1])
+	log.Infof("kselector is none %v", kSelector)
+
+	return kSelector
 }
 
 func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) error {
@@ -121,8 +133,6 @@ func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) e
 		spec := &model.ServiceSpec{
 			Type:            service.Type,
 			SessionAffinity: service.SessionAffinity,
-			ExternalIPs:     service.ExternalIPs,
-			LoadBalancerIP:  service.LoadBalancerIP,
 			ClusterIP:       service.ClusterIP,
 			Selector:        getServiceSelector(service),
 			Ports:           getServicePorts(service),
