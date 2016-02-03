@@ -9,7 +9,6 @@ import (
 	types "github.com/rancher/kubernetes-agent/rancherevents/types"
 	util "github.com/rancher/kubernetes-agent/rancherevents/util"
 	"github.com/rancher/kubernetes-model/model"
-	"strconv"
 	"strings"
 )
 
@@ -56,52 +55,16 @@ func (h *ServiceCreateHandler) createKubernetesNameSpace(stack types.Stack) erro
 	return nil
 }
 
-func getServiceLaunchConfig(service *types.Service) types.LaunchConfig {
-	var launchConfig types.LaunchConfig
-	if f, ok := service.Data["fields"]; ok {
-		if fMap, ok := f.(map[string]interface{}); ok {
-			if lc, ok := fMap["launchConfig"]; ok {
-				m, _ := json.Marshal(lc)
-				json.Unmarshal(m, &launchConfig)
-			}
-		}
-	}
-
-	return launchConfig
-}
-
 func getServicePorts(service *types.Service) []model.ServicePort {
-	launchConfig := getServiceLaunchConfig(service)
 	ports := make([]model.ServicePort, 0)
 
-	for _, port := range launchConfig.Ports {
-		var proto string
-		var sourcePort string
-		var targetPort string
-		splitted := strings.SplitN(port, "/", 2)
-		if splitted[1] != "" {
-			proto = splitted[1]
-		} else {
-			proto = "TCP"
-		}
-		splitted = strings.SplitN(splitted[0], ":", 2)
-		sourcePort = splitted[0]
-		if splitted[1] == "" {
-			targetPort = sourcePort
-		} else {
-			targetPort = splitted[1]
-		}
-
-		sp, _ := strconv.ParseInt(sourcePort, 10, 32)
-		tp, _ := strconv.ParseInt(targetPort, 10, 32)
-		spt := int32(sp)
-		tpt := int32(tp)
-		ptcl := strings.ToUpper(proto)
+	for _, port := range service.Data.Fields.Ports {
 		port := model.ServicePort{
-			Protocol:   ptcl,
-			Port:       spt,
-			TargetPort: tpt,
-			Name:       sourcePort,
+			Protocol:   strings.ToUpper(port.Protocol),
+			Port:       port.Port,
+			TargetPort: port.TargetPort,
+			NodePort:   port.NodePort,
+			Name:       port.Name,
 		}
 		ports = append(ports, port)
 	}
@@ -117,11 +80,9 @@ func getServiceSelector(service *types.Service) map[string]interface{} {
 	splitted := strings.SplitN(selector, "=", 2)
 	// only equality based selectors are supported
 	if splitted[1] == "" || strings.HasSuffix(splitted[0], "!") {
-		log.Infof("selector is none %s", selector)
 		return kSelector
 	}
 	kSelector[strings.TrimSpace(splitted[0])] = strings.TrimSpace(splitted[1])
-	log.Infof("kselector is none %v", kSelector)
 
 	return kSelector
 }
@@ -131,16 +92,29 @@ func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) e
 
 	if err != nil {
 		spec := &model.ServiceSpec{
-			Type:            service.Type,
-			SessionAffinity: service.SessionAffinity,
-			ClusterIP:       service.ClusterIP,
+			Type:            service.Data.Fields.Type,
+			SessionAffinity: service.Data.Fields.SessionAffinity,
+			ExternalIPs:     service.Data.Fields.ExternalIPs,
+			ClusterIP:       service.Data.Fields.ClusterIP,
 			Selector:        getServiceSelector(service),
 			Ports:           getServicePorts(service),
 		}
+
+		labels := map[string]interface{}{
+			"io.rancher.uuid": service.UUID}
+
+		lc := service.Data.Fields.LaunchConfig
+		if &lc != nil {
+			if lc.Labels != nil {
+				for k, v := range lc.Labels {
+					labels[k] = v
+				}
+			}
+		}
+
 		kService := &model.Service{
-			Metadata: &model.ObjectMeta{Name: service.Name, Labels: map[string]interface{}{
-				"io.rancher.uuid": service.UUID}},
-			Spec: spec,
+			Metadata: &model.ObjectMeta{Name: service.Name, Labels: labels},
+			Spec:     spec,
 		}
 
 		_, err := h.kClient.Service.CreateService(service.Stack.Name, kService)
