@@ -1,5 +1,9 @@
 package util
 
+import (
+	"github.com/rancher/go-rancher/client"
+)
+
 type Service struct {
 	Name              string `json:"name"`
 	UUID              string `json:"uuid"`
@@ -16,7 +20,8 @@ type Data struct {
 }
 
 type Fields struct {
-	LaunchConfig                  LaunchConfig           `json:"launchConfig"`
+	LaunchConfig                  client.LaunchConfig    `json:"launchConfig"`
+	SecondaryLaunchConfigs        []client.LaunchConfig  `json:"secondaryLaunchConfigs"`
 	SessionAffinity               string                 `json:"SessionAffinity"`
 	ClusterIP                     string                 `json:"vip"`
 	Type                          string                 `json:"serviceType"`
@@ -26,11 +31,11 @@ type Fields struct {
 	ActiveDeadlineSeconds         int64                  `json:"activeDeadlineSeconds"`
 	DnsPolicy                     string                 `json:"dnsPolicy"`
 	HostIPC                       bool                   `json:"hostIPC"`
-	HostNetwork                   bool                   `json:"hostNetwork"`
-	HostPID                       bool                   `json:"hostPID"`
 	NodeName                      string                 `json:"nodeName"`
 	ServiceAccountName            string                 `json:"serviceAccountName"`
 	TerminationGracePeriodSeconds int64                  `json:"terminationGracePeriodSeconds"`
+	NodeSelector                  string                 `json:"nodeSelector"`
+	ImagePullSecrets              []string               `json:"imagePullSecrets"`
 }
 
 type Port struct {
@@ -39,12 +44,6 @@ type Port struct {
 	NodePort   int32  `json:"nodePort"`
 	Protocol   string `json:"protocol"`
 	Name       string `json:"name"`
-}
-
-type LaunchConfig struct {
-	Name   string                 `json:"name"`
-	Labels map[string]interface{} `json:"labels"`
-	Image  string                 `json:"imageUuid"`
 }
 
 type Stack struct {

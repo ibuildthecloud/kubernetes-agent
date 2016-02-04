@@ -10,6 +10,7 @@ import (
 	types "github.com/rancher/kubernetes-agent/rancherevents/types"
 	util "github.com/rancher/kubernetes-agent/rancherevents/util"
 	"github.com/rancher/kubernetes-model/model"
+	"strconv"
 	"strings"
 )
 
@@ -73,14 +74,18 @@ func getServicePorts(service *types.Service) []model.ServicePort {
 }
 
 func getServiceSelector(service *types.Service) map[string]interface{} {
+	return parseSelector(service.SelectorContainer)
+}
+
+func parseSelector(selector string) map[string]interface{} {
 	kSelector := map[string]interface{}{}
-	if service.SelectorContainer == "" {
+	if selector == "" {
 		return kSelector
 	}
-	selector := strings.TrimSpace(service.SelectorContainer)
+	selector = strings.TrimSpace(selector)
 	splitted := strings.SplitN(selector, "=", 2)
 	// only equality based selectors are supported
-	if splitted[1] == "" || strings.HasSuffix(splitted[0], "!") {
+	if len(splitted) < 2 || strings.HasSuffix(splitted[0], "!") {
 		return kSelector
 	}
 	kSelector[strings.TrimSpace(splitted[0])] = strings.TrimSpace(splitted[1])
@@ -89,7 +94,7 @@ func getServiceSelector(service *types.Service) map[string]interface{} {
 }
 
 func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) error {
-	_, err := h.kClient.Service.ByName(service.Stack.Name, service.Name)
+	_, err := h.kClient.ReplicationController.ByName(service.Stack.Name, service.Name)
 
 	if err != nil {
 		spec := &model.ServiceSpec{
@@ -125,30 +130,263 @@ func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) e
 	return nil
 }
 
-func getPodTemplate(service *types.Service) (*model.PodTemplateSpec, error) {
-	containers := make([]model.Container, 0)
-	splitted := strings.SplitN(service.Data.Fields.LaunchConfig.Image, "docker:", 2)
+func getValueFromLabels(name string, lc *client.LaunchConfig) string {
+	sLabels := lc.Labels
+	if sLabels != nil {
+		if val, ok := sLabels[name]; ok {
+			if valStr, ok := val.(string); ok {
+				return valStr
+			}
+		}
+	}
+	return ""
+}
+
+func getCommandAndArgs(lc *client.LaunchConfig) ([]string, []string) {
+	command := make([]string, 0)
+	args := make([]string, 0)
+
+	fullCmd := lc.Command
+	if len(fullCmd) == 0 {
+		copy(command[:], lc.EntryPoint)
+	} else {
+		command = append(command, fullCmd[0])
+		for index, arg := range fullCmd {
+			if index == 0 {
+				continue
+			}
+			args = append(args, arg)
+		}
+	}
+	return command, args
+}
+
+func getEnvVars(lc *client.LaunchConfig) []model.EnvVar {
+	envVars := make([]model.EnvVar, 0)
+	for key, value := range lc.Environment {
+		if valueStr, ok := value.(string); ok {
+			envVar := model.EnvVar{
+				Name:  key,
+				Value: valueStr,
+			}
+			envVars = append(envVars, envVar)
+		}
+	}
+	return envVars
+}
+
+func getContainerPorts(lc *client.LaunchConfig) []model.ContainerPort {
+	ports := make([]model.ContainerPort, 0)
+	for _, port := range lc.Ports {
+		var proto string
+		var sourcePort string
+		var targetPort string
+		splitted := strings.SplitN(port, "/", 2)
+		if splitted[1] != "" {
+			proto = splitted[1]
+		} else {
+			proto = "TCP"
+		}
+		splitted = strings.SplitN(splitted[0], ":", 2)
+		sourcePort = splitted[0]
+		if splitted[1] == "" {
+			targetPort = sourcePort
+		} else {
+			targetPort = splitted[1]
+		}
+
+		sp, _ := strconv.ParseInt(sourcePort, 10, 32)
+		tp, _ := strconv.ParseInt(targetPort, 10, 32)
+		spt := int32(sp)
+		tpt := int32(tp)
+		ptcl := strings.ToUpper(proto)
+		port := model.ContainerPort{
+			Protocol:      ptcl,
+			HostPort:      spt,
+			ContainerPort: tpt,
+			Name:          sourcePort,
+		}
+		ports = append(ports, port)
+	}
+	return ports
+}
+
+func getLaunchCofigs(service *types.Service) []client.LaunchConfig {
+	lcs := make([]client.LaunchConfig, 0)
+	copy(lcs[:], service.Data.Fields.SecondaryLaunchConfigs)
+	plc := service.Data.Fields.LaunchConfig
+	lcs = append(lcs, plc)
+	return lcs
+}
+
+func getSecurityContext(lc *client.LaunchConfig) *model.SecurityContext {
+	add := make([]model.Capability, 0)
+	drop := make([]model.Capability, 0)
+	for _, rCap := range lc.CapAdd {
+		add = append(add, model.Capability(rCap))
+	}
+
+	for _, rCap := range lc.CapDrop {
+		drop = append(drop, model.Capability(rCap))
+	}
+
+	caps := &model.Capabilities{
+		Add:  add,
+		Drop: drop,
+	}
+
+	ctx := &model.SecurityContext{
+		Capabilities: caps,
+		Privileged:   lc.Privileged,
+		//RunAsUser:      nil, //done
+		//RunAsNonRoot:   nil, //done
+		//SeLinuxOptions: nil,
+	}
+	return ctx
+}
+
+func getContainer(lc *client.LaunchConfig, mounts []model.VolumeMount) (*model.Container, error) {
+	splitted := strings.SplitN(lc.ImageUuid, "docker:", 2)
 	if len(splitted) < 2 {
 		return nil, errors.New("Image is missing on a service")
 	}
-	container := model.Container{
-		Name:  service.Data.Fields.LaunchConfig.Name,
-		Image: splitted[1],
+
+	imagePullPolicy := getValueFromLabels("io.rancher.container.pull_image", lc)
+	if imagePullPolicy == "always" {
+		imagePullPolicy = "Always"
+	} else {
+		imagePullPolicy = ""
 	}
 
-	containers = append(containers, container)
+	command, args := getCommandAndArgs(lc)
+	container := model.Container{
+		//FIXME: read name from lc
+		Name:            "foo",
+		Image:           splitted[1],
+		Stdin:           lc.StdinOpen,
+		Tty:             lc.Tty,
+		Command:         command,
+		ImagePullPolicy: imagePullPolicy,
+		Args:            args,
+		Env:             getEnvVars(lc),
+		WorkingDir:      lc.WorkingDir,
+		Ports:           getContainerPorts(lc),
+		VolumeMounts:    mounts,
+	}
 
+	/*Lifecycle:                      nil, //done
+				  LivenessProbe:          nil,//done
+				  ReadinessProbe:         nil,//done
+				  TerminationMessagePath: nil,//done
+				  Resources:              nil,//done
+		SecurityContext: nil //done
+	}*/
+	return &container, nil
+}
+
+func getContainersAndVolumes(service *types.Service) ([]model.Container, []model.Volume, error) {
+	mounts, volumes, err := getVolumes(service)
+	if err != nil {
+		return nil, nil, err
+	}
+	containers := make([]model.Container, 0)
+	for _, lc := range getLaunchCofigs(service) {
+		//fix me - use launch config name
+		if container, err := getContainer(&lc, mounts["foo"]); err != nil {
+			return nil, nil, err
+		} else {
+			containers = append(containers, *container)
+		}
+	}
+
+	return containers, volumes, nil
+}
+
+func getHostNetwork(service *types.Service) bool {
+	return service.Data.Fields.LaunchConfig.NetworkMode == "host"
+}
+
+func getHostPID(service *types.Service) bool {
+	return service.Data.Fields.LaunchConfig.PidMode == "host"
+}
+
+func getImagePullSecrets(service *types.Service) []model.LocalObjectReference {
+	secrets := make([]model.LocalObjectReference, 0)
+	for _, name := range service.Data.Fields.ImagePullSecrets {
+		secret := model.LocalObjectReference{
+			Name: name,
+		}
+		secrets = append(secrets, secret)
+	}
+	return secrets
+}
+
+func getVolumes(service *types.Service) (map[string][]model.VolumeMount, []model.Volume, error) {
+	lcNameToMount := make(map[string][]model.VolumeMount)
+	vs := make([]model.Volume, 0)
+	lcs := getLaunchCofigs(service)
+	for _, lc := range lcs {
+		i := 0
+		ms := make([]model.VolumeMount, 0)
+		//FIXME read from the real config name
+		lcName := "foo"
+		for _, vol := range lc.DataVolumes {
+			log.Infof("volume is %v", vol)
+			splitted := strings.Split(vol, ":")
+			if len(splitted) < 2 {
+				return nil, nil, errors.New("DataVolume mount should have host and container path")
+			}
+			//fix me - read from config name
+			name := lcName + strconv.Itoa(i)
+			readOnly := false
+			if len(splitted) == 3 && splitted[3] == "ro" {
+				readOnly = true
+			}
+
+			hp := &model.HostPathVolumeSource{
+				Path: splitted[0],
+			}
+			v := model.Volume{
+				Name:     name,
+				HostPath: hp,
+			}
+			vs = append(vs, v)
+
+			m := model.VolumeMount{
+				Name:      name,
+				MountPath: splitted[1],
+				ReadOnly:  readOnly,
+			}
+
+			ms = append(ms, m)
+			i++
+		}
+		lcNameToMount[lcName] = ms
+		i = 0
+	}
+	return lcNameToMount, vs, nil
+}
+
+func getPodTemplate(service *types.Service) (*model.PodTemplateSpec, error) {
+	containers, volumes, err := getContainersAndVolumes(service)
+	if err != nil {
+		return nil, err
+	}
+
+	svc := &service.Data.Fields
 	podSpec := &model.PodSpec{
-		ActiveDeadlineSeconds:         service.Data.Fields.ActiveDeadlineSeconds,
-		DnsPolicy:                     service.Data.Fields.DnsPolicy,
-		HostIPC:                       service.Data.Fields.HostIPC,
-		HostNetwork:                   service.Data.Fields.HostNetwork,
-		HostPID:                       service.Data.Fields.HostPID,
-		NodeName:                      service.Data.Fields.NodeName,
-		NodeSelector:                  nil,
-		ServiceAccountName:            service.Data.Fields.ServiceAccountName,
-		TerminationGracePeriodSeconds: service.Data.Fields.TerminationGracePeriodSeconds,
+		ActiveDeadlineSeconds:         svc.ActiveDeadlineSeconds,
+		DnsPolicy:                     svc.DnsPolicy,
+		HostIPC:                       svc.HostIPC,
+		HostNetwork:                   getHostNetwork(service),
+		HostPID:                       getHostPID(service),
+		NodeName:                      svc.NodeName,
+		ServiceAccountName:            svc.ServiceAccountName,
+		TerminationGracePeriodSeconds: svc.TerminationGracePeriodSeconds,
 		Containers:                    containers,
+		NodeSelector:                  parseSelector(svc.NodeSelector),
+		ImagePullSecrets:              getImagePullSecrets(service),
+		Volumes:                       volumes,
 	}
 
 	template := &model.PodTemplateSpec{
@@ -185,8 +423,6 @@ func (h *ServiceCreateHandler) createKubernetesReplicationController(service *ty
 			Metadata: &model.ObjectMeta{Name: service.Name, Labels: labels},
 			Spec:     svcSpec,
 		}
-		log.Infof("labels are %v", labels)
-		log.Infof("selector is %v", svcSpec.Selector)
 		_, err = h.kClient.ReplicationController.CreateReplicationController(service.Stack.Name, kRC)
 		if err != nil {
 			return err
