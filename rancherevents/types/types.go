@@ -1,12 +1,14 @@
 package util
 
 type Service struct {
-	Name     string `json:"name"`
-	UUID     string `json:"uuid"`
-	Kind     string `json:"kind"`
-	Stack    Stack  `json:"environment"`
-	Selector string `json:"selectorContainer"`
-	Data     Data   `json:"data"`
+	Name              string `json:"name"`
+	UUID              string `json:"uuid"`
+	Kind              string `json:"kind"`
+	Stack             Stack  `json:"environment"`
+	SelectorContainer string `json:"selectorContainer"`
+	SelectorLink      string `json:"selectorLink"`
+	Data              Data   `json:"data"`
+	Scale             int32  `json:"scale"`
 }
 
 type Data struct {
@@ -14,12 +16,21 @@ type Data struct {
 }
 
 type Fields struct {
-	LaunchConfig    LaunchConfig `json:"launchConfig"`
-	SessionAffinity string       `json:"SessionAffinity"`
-	ClusterIP       string       `json:"vip"`
-	Type            string       `json:"serviceType"`
-	ExternalIPs     []string     `json:"externalIpAddresses"`
-	Ports           []Port       `json:"ports"`
+	LaunchConfig                  LaunchConfig           `json:"launchConfig"`
+	SessionAffinity               string                 `json:"SessionAffinity"`
+	ClusterIP                     string                 `json:"vip"`
+	Type                          string                 `json:"serviceType"`
+	ExternalIPs                   []string               `json:"externalIpAddresses"`
+	Ports                         []Port                 `json:"ports"`
+	Labels                        map[string]interface{} `json:"labels"`
+	ActiveDeadlineSeconds         int64                  `json:"activeDeadlineSeconds"`
+	DnsPolicy                     string                 `json:"dnsPolicy"`
+	HostIPC                       bool                   `json:"hostIPC"`
+	HostNetwork                   bool                   `json:"hostNetwork"`
+	HostPID                       bool                   `json:"hostPID"`
+	NodeName                      string                 `json:"nodeName"`
+	ServiceAccountName            string                 `json:"serviceAccountName"`
+	TerminationGracePeriodSeconds int64                  `json:"terminationGracePeriodSeconds"`
 }
 
 type Port struct {
@@ -31,7 +42,9 @@ type Port struct {
 }
 
 type LaunchConfig struct {
-	Labels map[string]string `json:"labels"`
+	Name   string                 `json:"name"`
+	Labels map[string]interface{} `json:"labels"`
+	Image  string                 `json:"imageUuid"`
 }
 
 type Stack struct {

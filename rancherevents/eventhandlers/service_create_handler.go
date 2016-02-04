@@ -2,6 +2,7 @@ package eventhandlers
 
 import (
 	"encoding/json"
+	"errors"
 	log "github.com/Sirupsen/logrus"
 	revents "github.com/rancher/go-machine-service/events"
 	"github.com/rancher/go-rancher/client"
@@ -73,10 +74,10 @@ func getServicePorts(service *types.Service) []model.ServicePort {
 
 func getServiceSelector(service *types.Service) map[string]interface{} {
 	kSelector := map[string]interface{}{}
-	if service.Selector == "" {
+	if service.SelectorContainer == "" {
 		return kSelector
 	}
-	selector := strings.TrimSpace(service.Selector)
+	selector := strings.TrimSpace(service.SelectorContainer)
 	splitted := strings.SplitN(selector, "=", 2)
 	// only equality based selectors are supported
 	if splitted[1] == "" || strings.HasSuffix(splitted[0], "!") {
@@ -103,12 +104,10 @@ func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) e
 		labels := map[string]interface{}{
 			"io.rancher.uuid": service.UUID}
 
-		lc := service.Data.Fields.LaunchConfig
-		if &lc != nil {
-			if lc.Labels != nil {
-				for k, v := range lc.Labels {
-					labels[k] = v
-				}
+		sLabels := service.Data.Fields.Labels
+		if sLabels != nil {
+			for k, v := range sLabels {
+				labels[k] = v
 			}
 		}
 
@@ -122,6 +121,77 @@ func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) e
 			return err
 		}
 		log.Infof("Created kubernetesService %s", service.Name)
+	}
+	return nil
+}
+
+func getPodTemplate(service *types.Service) (*model.PodTemplateSpec, error) {
+	containers := make([]model.Container, 0)
+	splitted := strings.SplitN(service.Data.Fields.LaunchConfig.Image, "docker:", 2)
+	if len(splitted) < 2 {
+		return nil, errors.New("Image is missing on a service")
+	}
+	container := model.Container{
+		Name:  service.Data.Fields.LaunchConfig.Name,
+		Image: splitted[1],
+	}
+
+	containers = append(containers, container)
+
+	podSpec := &model.PodSpec{
+		ActiveDeadlineSeconds:         service.Data.Fields.ActiveDeadlineSeconds,
+		DnsPolicy:                     service.Data.Fields.DnsPolicy,
+		HostIPC:                       service.Data.Fields.HostIPC,
+		HostNetwork:                   service.Data.Fields.HostNetwork,
+		HostPID:                       service.Data.Fields.HostPID,
+		NodeName:                      service.Data.Fields.NodeName,
+		NodeSelector:                  nil,
+		ServiceAccountName:            service.Data.Fields.ServiceAccountName,
+		TerminationGracePeriodSeconds: service.Data.Fields.TerminationGracePeriodSeconds,
+		Containers:                    containers,
+	}
+
+	template := &model.PodTemplateSpec{
+		Metadata: &model.ObjectMeta{Name: service.Name, Labels: service.Data.Fields.LaunchConfig.Labels},
+		Spec:     podSpec,
+	}
+	return template, nil
+}
+
+func (h *ServiceCreateHandler) createKubernetesReplicationController(service *types.Service) error {
+	_, err := h.kClient.ReplicationController.ByName(service.Stack.Name, service.Name)
+
+	if err != nil {
+		labels := map[string]interface{}{
+			"io.rancher.uuid": service.UUID}
+
+		sLabels := service.Data.Fields.Labels
+		if sLabels != nil {
+			for k, v := range sLabels {
+				labels[k] = v
+			}
+		}
+		podTemplateSpec, err := getPodTemplate(service)
+		if err != nil {
+			return err
+		}
+		svcSpec := &model.ReplicationControllerSpec{
+			Selector: getServiceSelector(service),
+			Replicas: service.Scale,
+			Template: podTemplateSpec,
+		}
+
+		kRC := &model.ReplicationController{
+			Metadata: &model.ObjectMeta{Name: service.Name, Labels: labels},
+			Spec:     svcSpec,
+		}
+		log.Infof("labels are %v", labels)
+		log.Infof("selector is %v", svcSpec.Selector)
+		_, err = h.kClient.ReplicationController.CreateReplicationController(service.Stack.Name, kRC)
+		if err != nil {
+			return err
+		}
+		log.Infof("Created kubernetesReplicationController %s", service.Name)
 	}
 	return nil
 }
@@ -140,6 +210,10 @@ func (svch *ServiceCreateHandler) Handler(event *revents.Event, cli *client.Ranc
 
 	if service.Kind == "kubernetesService" {
 		if err = svch.createKubernetesService(&service); err != nil {
+			return err
+		}
+	} else if service.Kind == "kubernetesReplicationController" {
+		if err = svch.createKubernetesReplicationController(&service); err != nil {
 			return err
 		}
 	}

@@ -16,9 +16,9 @@ func ConnectToEventStream(conf config.Config) error {
 		"config.update":                  eventhandlers.NewPingHandler().Handler,
 		"ping":                           eventhandlers.NewPingHandler().Handler,
 		"service.create":                 eventhandlers.NewServiceCreateHandler(kClient).Handler,
-		"service.activate":               eventhandlers.NewServiceCreateHandler(kClient).Handler,
-		"service.deactivate":             eventhandlers.NewServiceCreateHandler(kClient).Handler,
-		"service.remove":                 eventhandlers.NewServiceCreateHandler(kClient).Handler,
+		"service.activate":               eventhandlers.NewPingHandler().Handler,
+		"service.deactivate":             eventhandlers.NewPingHandler().Handler,
+		"service.remove":                 eventhandlers.NewPingHandler().Handler,
 	}
 
 	router, err := revents.NewEventRouter("", 0, conf.CattleURL, conf.CattleAccessKey, conf.CattleSecretKey, nil, eventHandlers, "", conf.WorkerCount)
