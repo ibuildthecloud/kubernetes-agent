@@ -133,7 +133,7 @@ func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) e
 	return nil
 }
 
-func getValueFromLabels(name string, lc *client.LaunchConfig) string {
+func getValueFromLabels(name string, lc *client.KubernetesLaunchConfig) string {
 	sLabels := lc.Labels
 	if sLabels != nil {
 		if val, ok := sLabels[name]; ok {
@@ -145,7 +145,7 @@ func getValueFromLabels(name string, lc *client.LaunchConfig) string {
 	return ""
 }
 
-func getCommandAndArgs(lc *client.LaunchConfig) ([]string, []string) {
+func getCommandAndArgs(lc *client.KubernetesLaunchConfig) ([]string, []string) {
 	command := make([]string, 0)
 	args := make([]string, 0)
 
@@ -164,7 +164,7 @@ func getCommandAndArgs(lc *client.LaunchConfig) ([]string, []string) {
 	return command, args
 }
 
-func getEnvVars(lc *client.LaunchConfig) []model.EnvVar {
+func getEnvVars(lc *client.KubernetesLaunchConfig) []model.EnvVar {
 	envVars := make([]model.EnvVar, 0)
 	for key, value := range lc.Environment {
 		if valueStr, ok := value.(string); ok {
@@ -178,7 +178,7 @@ func getEnvVars(lc *client.LaunchConfig) []model.EnvVar {
 	return envVars
 }
 
-func getContainerPorts(lc *client.LaunchConfig) []model.ContainerPort {
+func getContainerPorts(lc *client.KubernetesLaunchConfig) []model.ContainerPort {
 	ports := make([]model.ContainerPort, 0)
 	for _, port := range lc.Ports {
 		var proto string
@@ -214,15 +214,15 @@ func getContainerPorts(lc *client.LaunchConfig) []model.ContainerPort {
 	return ports
 }
 
-func getLaunchCofigs(service *types.Service) []client.LaunchConfig {
-	lcs := make([]client.LaunchConfig, 0)
+func getLaunchCofigs(service *types.Service) []client.KubernetesLaunchConfig {
+	lcs := make([]client.KubernetesLaunchConfig, 0)
 	copy(lcs[:], service.Data.Fields.SecondaryLaunchConfigs)
 	plc := service.Data.Fields.LaunchConfig
 	lcs = append(lcs, plc)
 	return lcs
 }
 
-func getSecurityContext(lc *client.LaunchConfig) *model.SecurityContext {
+func getSecurityContext(lc *client.KubernetesLaunchConfig) *model.SecurityContext {
 	add := make([]model.Capability, 0)
 	drop := make([]model.Capability, 0)
 	for _, rCap := range lc.CapAdd {
@@ -241,14 +241,22 @@ func getSecurityContext(lc *client.LaunchConfig) *model.SecurityContext {
 	ctx := &model.SecurityContext{
 		Capabilities: caps,
 		Privileged:   lc.Privileged,
-		//RunAsUser:      nil, //done
-		//RunAsNonRoot:   nil, //done
+		RunAsUser:    lc.RunAsUser,
+		RunAsNonRoot: lc.RunAsNonRoot,
 		//SeLinuxOptions: nil,
 	}
 	return ctx
 }
 
-func getContainer(lc *client.LaunchConfig, mounts []model.VolumeMount) (*model.Container, error) {
+func convertResource(convertFrom interface{}, convertTo interface{}) error {
+	m, _ := json.Marshal(convertFrom)
+	if err := json.Unmarshal(m, &convertTo); err != nil {
+		return err
+	}
+	return nil
+}
+
+func getContainer(lc *client.KubernetesLaunchConfig, mounts []model.VolumeMount) (*model.Container, error) {
 	splitted := strings.SplitN(lc.ImageUuid, "docker:", 2)
 	if len(splitted) < 2 {
 		return nil, errors.New("Image is missing on a service")
@@ -262,27 +270,37 @@ func getContainer(lc *client.LaunchConfig, mounts []model.VolumeMount) (*model.C
 	}
 
 	command, args := getCommandAndArgs(lc)
+	var req model.ResourceRequirements
+	if err := convertResource(lc.Resources, req); err != nil {
+		return nil, err
+	}
+
+	var lifecycle model.Lifecycle
+	if err := convertResource(lc.Lifecycle, lifecycle); err != nil {
+		return nil, err
+	}
+
 	container := model.Container{
-		//FIXME: read name from lc
-		Name:            "foo",
-		Image:           splitted[1],
-		Stdin:           lc.StdinOpen,
-		Tty:             lc.Tty,
-		Command:         command,
-		ImagePullPolicy: imagePullPolicy,
-		Args:            args,
-		Env:             getEnvVars(lc),
-		WorkingDir:      lc.WorkingDir,
-		Ports:           getContainerPorts(lc),
-		VolumeMounts:    mounts,
+		Name:                   lc.Name,
+		Image:                  splitted[1],
+		Stdin:                  lc.StdinOpen,
+		Tty:                    lc.Tty,
+		Command:                command,
+		ImagePullPolicy:        imagePullPolicy,
+		Args:                   args,
+		Env:                    getEnvVars(lc),
+		WorkingDir:             lc.WorkingDir,
+		Ports:                  getContainerPorts(lc),
+		VolumeMounts:           mounts,
+		Resources:              &req,
+		TerminationMessagePath: lc.TerminationMessagePath,
+		SecurityContext:        getSecurityContext(lc),
+		Lifecycle:              &lifecycle,
 	}
 
 	/*Lifecycle:                      nil, //done
 				  LivenessProbe:          nil,//done
 				  ReadinessProbe:         nil,//done
-				  TerminationMessagePath: nil,//done
-				  Resources:              nil,//done
-		SecurityContext: nil //done
 	}*/
 	return &container, nil
 }
@@ -294,8 +312,7 @@ func getContainersAndVolumes(service *types.Service) ([]model.Container, []model
 	}
 	containers := make([]model.Container, 0)
 	for _, lc := range getLaunchCofigs(service) {
-		//fix me - use launch config name
-		if container, err := getContainer(&lc, mounts["foo"]); err != nil {
+		if container, err := getContainer(&lc, mounts[lc.Name]); err != nil {
 			return nil, nil, err
 		} else {
 			containers = append(containers, *container)
@@ -331,15 +348,13 @@ func getVolumes(service *types.Service) (map[string][]model.VolumeMount, []model
 	for _, lc := range lcs {
 		i := 0
 		ms := make([]model.VolumeMount, 0)
-		//FIXME read from the real config name
-		lcName := "foo"
+		lcName := lc.Name
 		for _, vol := range lc.DataVolumes {
 			log.Infof("volume is %v", vol)
 			splitted := strings.Split(vol, ":")
 			if len(splitted) < 2 {
 				return nil, nil, errors.New("DataVolume mount should have host and container path")
 			}
-			//fix me - read from config name
 			name := lcName + strconv.Itoa(i)
 			readOnly := false
 			if len(splitted) == 3 && splitted[3] == "ro" {

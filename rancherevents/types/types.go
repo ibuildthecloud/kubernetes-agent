@@ -20,22 +20,22 @@ type Data struct {
 }
 
 type Fields struct {
-	LaunchConfig                  client.LaunchConfig    `json:"launchConfig"`
-	SecondaryLaunchConfigs        []client.LaunchConfig  `json:"secondaryLaunchConfigs"`
-	SessionAffinity               string                 `json:"SessionAffinity"`
-	ClusterIP                     string                 `json:"vip"`
-	Type                          string                 `json:"serviceType"`
-	ExternalIPs                   []string               `json:"externalIpAddresses"`
-	Ports                         []Port                 `json:"ports"`
-	Labels                        map[string]interface{} `json:"labels"`
-	ActiveDeadlineSeconds         int64                  `json:"activeDeadlineSeconds"`
-	DnsPolicy                     string                 `json:"dnsPolicy"`
-	HostIPC                       bool                   `json:"hostIPC"`
-	NodeName                      string                 `json:"nodeName"`
-	ServiceAccountName            string                 `json:"serviceAccountName"`
-	TerminationGracePeriodSeconds int64                  `json:"terminationGracePeriodSeconds"`
-	NodeSelector                  string                 `json:"nodeSelector"`
-	ImagePullSecrets              []string               `json:"imagePullSecrets"`
+	LaunchConfig                  client.KubernetesLaunchConfig   `json:"launchConfig"`
+	SecondaryLaunchConfigs        []client.KubernetesLaunchConfig `json:"secondaryLaunchConfigs"`
+	SessionAffinity               string                          `json:"SessionAffinity"`
+	ClusterIP                     string                          `json:"vip"`
+	Type                          string                          `json:"serviceType"`
+	ExternalIPs                   []string                        `json:"externalIpAddresses"`
+	Ports                         []Port                          `json:"ports"`
+	Labels                        map[string]interface{}          `json:"labels"`
+	ActiveDeadlineSeconds         int64                           `json:"activeDeadlineSeconds"`
+	DnsPolicy                     string                          `json:"dnsPolicy"`
+	HostIPC                       bool                            `json:"hostIPC"`
+	NodeName                      string                          `json:"serviceNodeName"`
+	ServiceAccountName            string                          `json:"serviceAccountName"`
+	TerminationGracePeriodSeconds int64                           `json:"terminationGracePeriodSeconds"`
+	NodeSelector                  string                          `json:"nodeSelector"`
+	ImagePullSecrets              []string                        `json:"imagePullSecrets"`
 }
 
 type Port struct {
