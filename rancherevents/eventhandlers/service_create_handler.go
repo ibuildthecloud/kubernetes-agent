@@ -97,7 +97,7 @@ func parseSelector(selector string) map[string]interface{} {
 }
 
 func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) error {
-	_, err := h.kClient.ReplicationController.ByName(service.Stack.Name, service.Name)
+	_, err := h.kClient.Service.ByName(service.Stack.Name, service.Name)
 
 	if err != nil {
 		spec := &model.ServiceSpec{
@@ -248,12 +248,53 @@ func getSecurityContext(lc *client.KubernetesLaunchConfig) *model.SecurityContex
 	return ctx
 }
 
-func convertResource(convertFrom interface{}, convertTo interface{}) error {
-	m, _ := json.Marshal(convertFrom)
-	if err := json.Unmarshal(m, &convertTo); err != nil {
-		return err
+func getLifecycle(lc *client.KubernetesLaunchConfig) (*model.Lifecycle, error) {
+	var lifecycle model.Lifecycle
+	log.Infof("rancher lifecycle %v", lc.Lifecycle)
+
+	m, _ := json.Marshal(lc.Lifecycle)
+	if err := json.Unmarshal(m, &lifecycle); err != nil {
+		return nil, err
 	}
-	return nil
+
+	if lifecycle.PostStart != nil {
+		if len(lifecycle.PostStart.Exec.Command) == 0 {
+			lifecycle.PostStart.Exec = nil
+		}
+
+		if lifecycle.PostStart.HttpGet.Port == 0 {
+			lifecycle.PostStart.HttpGet = nil
+		}
+
+		if lifecycle.PostStart.TcpSocket.Port == "" {
+			lifecycle.PostStart.TcpSocket = nil
+		}
+	}
+
+	if lifecycle.PreStop != nil {
+		if len(lifecycle.PreStop.Exec.Command) == 0 {
+			lifecycle.PreStop.Exec = nil
+		}
+
+		if lifecycle.PreStop.HttpGet.Port == 0 {
+			lifecycle.PreStop.HttpGet = nil
+		}
+
+		if lifecycle.PreStop.TcpSocket.Port == "" {
+			lifecycle.PreStop.TcpSocket = nil
+		}
+	}
+
+	return &lifecycle, nil
+}
+
+func getRequirements(lc *client.KubernetesLaunchConfig) (*model.ResourceRequirements, error) {
+	var req model.ResourceRequirements
+	m, _ := json.Marshal(lc.Resources)
+	if err := json.Unmarshal(m, &req); err != nil {
+		return nil, err
+	}
+	return &req, nil
 }
 
 func getContainer(lc *client.KubernetesLaunchConfig, mounts []model.VolumeMount) (*model.Container, error) {
@@ -270,13 +311,12 @@ func getContainer(lc *client.KubernetesLaunchConfig, mounts []model.VolumeMount)
 	}
 
 	command, args := getCommandAndArgs(lc)
-	var req model.ResourceRequirements
-	if err := convertResource(lc.Resources, req); err != nil {
+	lifecycle, err := getLifecycle(lc)
+	if err != nil {
 		return nil, err
 	}
-
-	var lifecycle model.Lifecycle
-	if err := convertResource(lc.Lifecycle, lifecycle); err != nil {
+	req, err := getRequirements(lc)
+	if err != nil {
 		return nil, err
 	}
 
@@ -292,14 +332,13 @@ func getContainer(lc *client.KubernetesLaunchConfig, mounts []model.VolumeMount)
 		WorkingDir:             lc.WorkingDir,
 		Ports:                  getContainerPorts(lc),
 		VolumeMounts:           mounts,
-		Resources:              &req,
+		Resources:              req,
 		TerminationMessagePath: lc.TerminationMessagePath,
 		SecurityContext:        getSecurityContext(lc),
-		Lifecycle:              &lifecycle,
+		Lifecycle:              lifecycle,
 	}
 
-	/*Lifecycle:                      nil, //done
-				  LivenessProbe:          nil,//done
+	/*LivenessProbe:          nil,//done
 				  ReadinessProbe:         nil,//done
 	}*/
 	return &container, nil
