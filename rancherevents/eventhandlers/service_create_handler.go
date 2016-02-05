@@ -82,13 +82,16 @@ func parseSelector(selector string) map[string]interface{} {
 	if selector == "" {
 		return kSelector
 	}
-	selector = strings.TrimSpace(selector)
-	splitted := strings.SplitN(selector, "=", 2)
-	// only equality based selectors are supported
-	if len(splitted) < 2 || strings.HasSuffix(splitted[0], "!") {
-		return kSelector
+	selectors := strings.Split(selector, ",")
+	for _, selector := range selectors {
+		selector = strings.TrimSpace(selector)
+		splitted := strings.SplitN(selector, "=", 2)
+		// only equality based selectors are supported
+		if len(splitted) < 2 || strings.HasSuffix(splitted[0], "!") {
+			continue
+		}
+		kSelector[strings.TrimSpace(splitted[0])] = strings.TrimSpace(splitted[1])
 	}
-	kSelector[strings.TrimSpace(splitted[0])] = strings.TrimSpace(splitted[1])
 
 	return kSelector
 }
