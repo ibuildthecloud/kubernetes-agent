@@ -250,7 +250,6 @@ func getSecurityContext(lc *client.KubernetesLaunchConfig) *model.SecurityContex
 
 func getLifecycle(lc *client.KubernetesLaunchConfig) (*model.Lifecycle, error) {
 	var lifecycle model.Lifecycle
-	log.Infof("rancher lifecycle %v", lc.Lifecycle)
 
 	m, _ := json.Marshal(lc.Lifecycle)
 	if err := json.Unmarshal(m, &lifecycle); err != nil {
@@ -258,31 +257,48 @@ func getLifecycle(lc *client.KubernetesLaunchConfig) (*model.Lifecycle, error) {
 	}
 
 	if lifecycle.PostStart != nil {
+		i := 0
 		if len(lifecycle.PostStart.Exec.Command) == 0 {
 			lifecycle.PostStart.Exec = nil
+			i++
 		}
 
 		if lifecycle.PostStart.HttpGet.Port == 0 {
 			lifecycle.PostStart.HttpGet = nil
+			i++
 		}
 
 		if lifecycle.PostStart.TcpSocket.Port == "" {
 			lifecycle.PostStart.TcpSocket = nil
+			i++
+		}
+		if i == 3 {
+			lifecycle.PostStart = nil
 		}
 	}
 
 	if lifecycle.PreStop != nil {
+		i := 0
 		if len(lifecycle.PreStop.Exec.Command) == 0 {
 			lifecycle.PreStop.Exec = nil
+			i++
 		}
 
 		if lifecycle.PreStop.HttpGet.Port == 0 {
 			lifecycle.PreStop.HttpGet = nil
+			i++
 		}
 
 		if lifecycle.PreStop.TcpSocket.Port == "" {
 			lifecycle.PreStop.TcpSocket = nil
+			i++
 		}
+		if i == 3 {
+			lifecycle.PreStop = nil
+		}
+	}
+	if lifecycle.PreStop == nil && lifecycle.PostStart == nil {
+		return nil, nil
 	}
 
 	return &lifecycle, nil
@@ -295,6 +311,37 @@ func getRequirements(lc *client.KubernetesLaunchConfig) (*model.ResourceRequirem
 		return nil, err
 	}
 	return &req, nil
+}
+
+func getProbe(rancherProbe *client.KubernetesProbe) (*model.Probe, error) {
+	var probe model.Probe
+
+	m, _ := json.Marshal(rancherProbe)
+	if err := json.Unmarshal(m, &probe); err != nil {
+		return nil, err
+	}
+
+	i := 0
+	if len(probe.Exec.Command) == 0 {
+		probe.Exec = nil
+		i++
+	}
+
+	if probe.HttpGet.Port == 0 {
+		probe.HttpGet = nil
+		i++
+	}
+
+	if probe.TcpSocket.Port == "" {
+		probe.TcpSocket = nil
+		i++
+	}
+
+	if i == 3 {
+		return nil, nil
+	}
+
+	return &probe, nil
 }
 
 func getContainer(lc *client.KubernetesLaunchConfig, mounts []model.VolumeMount) (*model.Container, error) {
@@ -320,6 +367,16 @@ func getContainer(lc *client.KubernetesLaunchConfig, mounts []model.VolumeMount)
 		return nil, err
 	}
 
+	lProbe, err := getProbe(&lc.LivenessProbe)
+	if err != nil {
+		return nil, err
+	}
+
+	rProbe, err := getProbe(&lc.ReadinessProbe)
+	if err != nil {
+		return nil, err
+	}
+
 	container := model.Container{
 		Name:                   lc.Name,
 		Image:                  splitted[1],
@@ -336,11 +393,10 @@ func getContainer(lc *client.KubernetesLaunchConfig, mounts []model.VolumeMount)
 		TerminationMessagePath: lc.TerminationMessagePath,
 		SecurityContext:        getSecurityContext(lc),
 		Lifecycle:              lifecycle,
+		LivenessProbe:          lProbe,
+		ReadinessProbe:         rProbe,
 	}
 
-	/*LivenessProbe:          nil,//done
-				  ReadinessProbe:         nil,//done
-	}*/
 	return &container, nil
 }
 
