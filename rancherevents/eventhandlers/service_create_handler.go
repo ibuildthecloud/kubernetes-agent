@@ -57,22 +57,6 @@ func (h *ServiceCreateHandler) createKubernetesNameSpace(stack types.Stack) erro
 	return nil
 }
 
-func getServicePorts(service *types.Service) []model.ServicePort {
-	ports := make([]model.ServicePort, 0)
-
-	for _, port := range service.Data.Fields.Ports {
-		port := model.ServicePort{
-			Protocol:   strings.ToUpper(port.Protocol),
-			Port:       port.Port,
-			TargetPort: port.TargetPort,
-			NodePort:   port.NodePort,
-			Name:       port.Name,
-		}
-		ports = append(ports, port)
-	}
-	return ports
-}
-
 func getServiceSelector(service *types.Service) map[string]interface{} {
 	return parseSelector(service.SelectorContainer)
 }
@@ -97,39 +81,27 @@ func parseSelector(selector string) map[string]interface{} {
 }
 
 func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) error {
-	_, err := h.kClient.Service.ByName(service.Stack.Name, service.Name)
+	var kService model.Service
+	m, _ := json.Marshal(service.Data.Fields.Template)
+	if err := json.Unmarshal(m, &kService); err != nil {
+		return err
+	}
 
+	svcName := kService.Metadata.Name
+	_, err := h.kClient.Service.ByName(service.Stack.Name, svcName)
 	if err != nil {
-		spec := &model.ServiceSpec{
-			Type:            service.Data.Fields.Type,
-			SessionAffinity: service.Data.Fields.SessionAffinity,
-			ExternalIPs:     service.Data.Fields.ExternalIPs,
-			ClusterIP:       service.Data.Fields.ClusterIP,
-			Selector:        getServiceSelector(service),
-			Ports:           getServicePorts(service),
+		if kService.Metadata.Labels == nil {
+			kService.Metadata.Labels = make(map[string]interface{})
 		}
 
-		labels := map[string]interface{}{
-			"io.rancher.uuid": service.UUID}
-
-		sLabels := service.Data.Fields.Labels
-		if sLabels != nil {
-			for k, v := range sLabels {
-				labels[k] = v
-			}
-		}
-
-		kService := &model.Service{
-			Metadata: &model.ObjectMeta{Name: service.Name, Labels: labels},
-			Spec:     spec,
-		}
-
-		_, err := h.kClient.Service.CreateService(service.Stack.Name, kService)
+		kService.Metadata.Labels["io.rancher.uuid"] = service.UUID
+		_, err = h.kClient.Service.CreateService(service.Stack.Name, &kService)
 		if err != nil {
 			return err
 		}
-		log.Infof("Created kubernetesService %s", service.Name)
+		log.Infof("Created kubernetesService %s", svcName)
 	}
+
 	return nil
 }
 

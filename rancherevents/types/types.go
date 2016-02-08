@@ -10,7 +10,6 @@ type Service struct {
 	Kind              string `json:"kind"`
 	Stack             Stack  `json:"environment"`
 	SelectorContainer string `json:"selectorContainer"`
-	SelectorLink      string `json:"selectorLink"`
 	Data              Data   `json:"data"`
 	Scale             int32  `json:"scale"`
 }
@@ -20,13 +19,9 @@ type Data struct {
 }
 
 type Fields struct {
+	Template                      interface{}                     `json:"template"`
 	LaunchConfig                  client.KubernetesLaunchConfig   `json:"launchConfig"`
 	SecondaryLaunchConfigs        []client.KubernetesLaunchConfig `json:"secondaryLaunchConfigs"`
-	SessionAffinity               string                          `json:"SessionAffinity"`
-	ClusterIP                     string                          `json:"vip"`
-	Type                          string                          `json:"serviceType"`
-	ExternalIPs                   []string                        `json:"externalIpAddresses"`
-	Ports                         []Port                          `json:"ports"`
 	Labels                        map[string]interface{}          `json:"labels"`
 	ActiveDeadlineSeconds         int64                           `json:"activeDeadlineSeconds"`
 	DnsPolicy                     string                          `json:"dnsPolicy"`
