@@ -24,22 +24,6 @@ func NewServiceCreateHandler(kClient *kubernetesclient.Client) *ServiceCreateHan
 	}
 }
 
-func (h *ServiceCreateHandler) getRancherService(event *revents.Event, cli *client.RancherClient) (types.Service, error) {
-	var service types.Service
-
-	data := event.Data
-	if svc, ok := data["service"]; ok {
-		if svcMap, ok := svc.(map[string]interface{}); ok {
-			m, _ := json.Marshal(svcMap)
-			if err := json.Unmarshal(m, &service); err != nil {
-				return service, err
-			}
-		}
-	}
-
-	return service, nil
-}
-
 func (h *ServiceCreateHandler) createKubernetesNameSpace(stack types.Stack) error {
 	_, err := h.kClient.Namespace.ByName(stack.Name)
 	if err != nil {
@@ -81,14 +65,13 @@ func parseSelector(selector string) map[string]interface{} {
 }
 
 func (h *ServiceCreateHandler) createKubernetesService(service *types.Service) error {
-	var kService model.Service
-	m, _ := json.Marshal(service.Data.Fields.Template)
-	if err := json.Unmarshal(m, &kService); err != nil {
+	kService, err := util.ConvertRancherToKubernetesService(service)
+	if err != nil {
 		return err
 	}
 
 	svcName := kService.Metadata.Name
-	_, err := h.kClient.Service.ByName(service.Stack.Name, svcName)
+	_, err = h.kClient.Service.ByName(service.Stack.Name, svcName)
 	if err != nil {
 		if kService.Metadata.Labels == nil {
 			kService.Metadata.Labels = make(map[string]interface{})
@@ -520,7 +503,7 @@ func (h *ServiceCreateHandler) createKubernetesReplicationController(service *ty
 func (svch *ServiceCreateHandler) Handler(event *revents.Event, cli *client.RancherClient) error {
 	log.Infof("Received event: Name: %s, Event Id: %s, Resource Id: %s", event.Name, event.Id, event.ResourceId)
 
-	service, err := svch.getRancherService(event, cli)
+	service, err := util.GetRancherService(event, cli)
 	if err != nil {
 		return err
 	}
