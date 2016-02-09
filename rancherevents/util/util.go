@@ -29,6 +29,15 @@ func ConvertRancherToKubernetesService(service *types.Service) (model.Service, e
 	return kService, nil
 }
 
+func ConvertRancherToKubernetesReplicationController(service *types.Service) (model.ReplicationController, error) {
+	var rc model.ReplicationController
+	m, _ := json.Marshal(service.Data.Fields.Template)
+	if err := json.Unmarshal(m, &rc); err != nil {
+		return rc, err
+	}
+	return rc, nil
+}
+
 func GetRancherService(event *revents.Event, cli *client.RancherClient) (types.Service, error) {
 	var service types.Service
 
