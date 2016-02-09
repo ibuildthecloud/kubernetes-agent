@@ -27,8 +27,8 @@ func (h *ServiceUpdateHandler) updateKubernetesService(service *types.Service) e
 	}
 
 	svcName := kService.Metadata.Name
-	_, err = h.kClient.Service.ByName(service.Stack.Name, svcName)
-	if err == nil {
+	existingService, err := h.kClient.Service.ByName(service.Stack.Name, svcName)
+	if err == nil && kService.Metadata.ResourceVersion == existingService.Metadata.ResourceVersion {
 		if kService.Metadata.Labels == nil {
 			kService.Metadata.Labels = make(map[string]interface{})
 		}
@@ -53,8 +53,8 @@ func (h *ServiceUpdateHandler) updateKubernetesReplicationController(service *ty
 	}
 
 	svcName := rc.Metadata.Name
-	_, err = h.kClient.ReplicationController.ByName(service.Stack.Name, svcName)
-	if err == nil {
+	existingRc, err := h.kClient.ReplicationController.ByName(service.Stack.Name, svcName)
+	if err == nil && rc.Metadata.ResourceVersion == existingRc.Metadata.ResourceVersion {
 		if rc.Metadata.Labels == nil {
 			rc.Metadata.Labels = make(map[string]interface{})
 		}
