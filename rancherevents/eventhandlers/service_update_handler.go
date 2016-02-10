@@ -20,7 +20,6 @@ func NewServiceUpdateHandler(kClient *kubernetesclient.Client) *ServiceUpdateHan
 }
 
 func (h *ServiceUpdateHandler) updateKubernetesService(service *types.Service) error {
-	log.Infof("updating service %v", service)
 	kService, err := util.ConvertRancherToKubernetesService(service)
 	if err != nil {
 		return err
@@ -28,12 +27,22 @@ func (h *ServiceUpdateHandler) updateKubernetesService(service *types.Service) e
 
 	svcName := kService.Metadata.Name
 	existingService, err := h.kClient.Service.ByName(service.Stack.Name, svcName)
-	if err == nil && kService.Metadata.ResourceVersion == existingService.Metadata.ResourceVersion {
+	kService.Metadata.ResourceVersion = existingService.Metadata.ResourceVersion
+	if err == nil {
+		log.Infof("updating kubernetesService %s", svcName)
+
+		newVersion := util.GetNewRancherResourceVersion(service, existingService.Metadata)
+		if newVersion == "" {
+			log.Infof("update for kubernetesService %s is not needed", svcName)
+			return nil
+		}
+
 		if kService.Metadata.Labels == nil {
 			kService.Metadata.Labels = make(map[string]interface{})
 		}
-
+		kService.Metadata.Labels["io.rancher.resourceversion"] = newVersion
 		kService.Metadata.Labels["io.rancher.uuid"] = service.UUID
+
 		_, err = h.kClient.Service.ReplaceService(service.Stack.Name, &kService)
 		if err != nil {
 			return err
@@ -45,8 +54,6 @@ func (h *ServiceUpdateHandler) updateKubernetesService(service *types.Service) e
 }
 
 func (h *ServiceUpdateHandler) updateKubernetesReplicationController(service *types.Service) error {
-	log.Infof("updating rc %v", service)
-
 	rc, err := util.ConvertRancherToKubernetesReplicationController(service)
 	if err != nil {
 		return err
@@ -54,11 +61,21 @@ func (h *ServiceUpdateHandler) updateKubernetesReplicationController(service *ty
 
 	svcName := rc.Metadata.Name
 	existingRc, err := h.kClient.ReplicationController.ByName(service.Stack.Name, svcName)
-	if err == nil && rc.Metadata.ResourceVersion == existingRc.Metadata.ResourceVersion {
+	rc.Metadata.ResourceVersion = existingRc.Metadata.ResourceVersion
+	if err == nil {
+		log.Infof("updating kubernetesReplicationController %s", svcName)
+
+		newVersion := util.GetNewRancherResourceVersion(service, existingRc.Metadata)
+		if newVersion == "" {
+			log.Infof("update for kubernetesReplicationController %s is not needed", svcName)
+			return nil
+		}
+
 		if rc.Metadata.Labels == nil {
 			rc.Metadata.Labels = make(map[string]interface{})
 		}
 
+		rc.Metadata.Labels["io.rancher.resourceversion"] = newVersion
 		rc.Metadata.Labels["io.rancher.uuid"] = service.UUID
 		_, err = h.kClient.ReplicationController.ReplaceReplicationController(service.Stack.Name, &rc)
 		if err != nil {

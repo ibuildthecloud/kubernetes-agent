@@ -13,7 +13,8 @@ type Data struct {
 }
 
 type Fields struct {
-	Template interface{} `json:"template"`
+	Template        interface{} `json:"template"`
+	ResourceVersion string      `json:"resourceVersion"`
 }
 
 type Stack struct {

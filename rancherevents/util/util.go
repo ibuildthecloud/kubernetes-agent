@@ -26,6 +26,12 @@ func ConvertRancherToKubernetesService(service *types.Service) (model.Service, e
 	if err := json.Unmarshal(m, &kService); err != nil {
 		return kService, err
 	}
+	if kService.Metadata == nil {
+		kService.Metadata = &model.ObjectMeta{
+			Name: service.Name,
+		}
+	}
+
 	return kService, nil
 }
 
@@ -35,6 +41,13 @@ func ConvertRancherToKubernetesReplicationController(service *types.Service) (mo
 	if err := json.Unmarshal(m, &rc); err != nil {
 		return rc, err
 	}
+
+	if rc.Metadata == nil {
+		rc.Metadata = &model.ObjectMeta{
+			Name: service.Name,
+		}
+	}
+
 	return rc, nil
 }
 
@@ -52,4 +65,16 @@ func GetRancherService(event *revents.Event, cli *client.RancherClient) (types.S
 	}
 
 	return service, nil
+}
+
+func GetNewRancherResourceVersion(service *types.Service, metadata *model.ObjectMeta) string {
+	newVersion := service.Data.Fields.ResourceVersion
+	var existingVersion interface{}
+	if metadata.Labels != nil {
+		existingVersion = metadata.Labels["io.rancher.resourceversion"]
+	}
+	if newVersion == existingVersion {
+		return ""
+	}
+	return service.Data.Fields.ResourceVersion
 }
