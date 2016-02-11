@@ -20,6 +20,18 @@ func PublishReply(reply *client.Publish, apiClient *client.RancherClient) error 
 	return err
 }
 
+func CreateAndPublishReply(event *revents.Event, cli *client.RancherClient) error {
+	reply := NewReply(event)
+	if reply.Name == "" {
+		return nil
+	}
+	err := PublishReply(reply, cli)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func ConvertRancherToKubernetesService(service *types.Service) (model.Service, error) {
 	var kService model.Service
 	m, _ := json.Marshal(service.Data.Fields.Template)
@@ -31,6 +43,12 @@ func ConvertRancherToKubernetesService(service *types.Service) (model.Service, e
 			Name: service.Name,
 		}
 	}
+
+	if kService.Metadata.Labels == nil {
+		kService.Metadata.Labels = make(map[string]interface{})
+	}
+
+	kService.Metadata.Labels["io.rancher.uuid"] = service.UUID
 
 	return kService, nil
 }
@@ -47,11 +65,16 @@ func ConvertRancherToKubernetesReplicationController(service *types.Service) (mo
 			Name: service.Name,
 		}
 	}
+	if rc.Metadata.Labels == nil {
+		rc.Metadata.Labels = make(map[string]interface{})
+	}
+
+	rc.Metadata.Labels["io.rancher.uuid"] = service.UUID
 
 	return rc, nil
 }
 
-func GetRancherService(event *revents.Event, cli *client.RancherClient) (types.Service, error) {
+func GetRancherService(event *revents.Event) (types.Service, error) {
 	var service types.Service
 
 	data := event.Data
@@ -67,14 +90,16 @@ func GetRancherService(event *revents.Event, cli *client.RancherClient) (types.S
 	return service, nil
 }
 
-func GetNewRancherResourceVersion(service *types.Service, metadata *model.ObjectMeta) string {
-	newVersion := service.Data.Fields.ResourceVersion
-	var existingVersion interface{}
-	if metadata.Labels != nil {
-		existingVersion = metadata.Labels["io.rancher.resourceversion"]
+func IsNoOp(event *revents.Event) bool {
+	data := event.Data
+	if process, ok := data["processData"]; ok {
+		if svcMap, ok := process.(map[string]interface{}); ok {
+			if val, ok := svcMap["containerNoOpEvent"]; ok {
+				if boolVal, ok := val.(bool); ok {
+					return boolVal
+				}
+			}
+		}
 	}
-	if newVersion == existingVersion {
-		return ""
-	}
-	return service.Data.Fields.ResourceVersion
+	return false
 }
