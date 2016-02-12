@@ -39,9 +39,11 @@ func ConvertRancherToKubernetesService(service *types.Service) (model.Service, e
 		return kService, err
 	}
 	if kService.Metadata == nil {
-		kService.Metadata = &model.ObjectMeta{
-			Name: service.Name,
-		}
+		kService.Metadata = &model.ObjectMeta{}
+	}
+
+	if kService.Metadata.Name == "" {
+		kService.Metadata.Name = service.Name
 	}
 
 	if kService.Metadata.Labels == nil {
@@ -61,10 +63,13 @@ func ConvertRancherToKubernetesReplicationController(service *types.Service) (mo
 	}
 
 	if rc.Metadata == nil {
-		rc.Metadata = &model.ObjectMeta{
-			Name: service.Name,
-		}
+		rc.Metadata = &model.ObjectMeta{}
 	}
+
+	if rc.Metadata.Name == "" {
+		rc.Metadata.Name = service.Name
+	}
+
 	if rc.Metadata.Labels == nil {
 		rc.Metadata.Labels = make(map[string]interface{})
 	}
