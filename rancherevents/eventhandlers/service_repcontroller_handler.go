@@ -169,7 +169,7 @@ func (h *ServiceHandler) Handler(event *revents.Event, cli *client.RancherClient
 			}
 		}
 
-		if service.Kind == "kubernetesService" {
+		if strings.ToLower(service.Kind) == "kubernetesservice" {
 			if event.Name == "service.create" {
 				if err = h.createKubernetesService(&service); err != nil {
 					return err
@@ -184,7 +184,7 @@ func (h *ServiceHandler) Handler(event *revents.Event, cli *client.RancherClient
 				}
 			}
 
-		} else if service.Kind == "kubernetesReplicationController" {
+		} else if strings.ToLower(service.Kind) == "kubernetesreplicationcontroller" {
 			if event.Name == "service.create" {
 				if err = h.createKubernetesReplicationController(&service); err != nil {
 					return err
