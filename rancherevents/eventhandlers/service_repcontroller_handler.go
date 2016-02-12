@@ -37,6 +37,7 @@ func (h *ServiceHandler) updateKubernetesService(service *types.Service) error {
 			return err
 		}
 	}
+	log.Infof("Updated kubernetesService %s", svcName)
 
 	return nil
 }
@@ -55,6 +56,8 @@ func (h *ServiceHandler) updateKubernetesReplicationController(service *types.Se
 			return err
 		}
 	}
+	log.Infof("Updated kubernetesReplicationController %s", svcName)
+
 	return nil
 }
 
@@ -77,7 +80,7 @@ func (h *ServiceHandler) removeKubernetesService(service *types.Service) error {
 			return fmt.Errorf("Failed to remove kubernetesService %s; response code %v", svcName, status.Code)
 		}
 	}
-
+	log.Infof("Removed kubernetesService %s", svcName)
 	return nil
 }
 
@@ -93,6 +96,8 @@ func (h *ServiceHandler) removeKubernetesReplicationController(service *types.Se
 			return fmt.Errorf("Failed to remove kubernetesReplicationController %s; response code %v", service.Name, status.Code)
 		}
 	}
+	log.Infof("Removed kubernetesReplicationController %s", service.Name)
+
 	return nil
 }
 
@@ -125,6 +130,7 @@ func (h *ServiceHandler) createKubernetesService(service *types.Service) error {
 			return err
 		}
 	}
+	log.Infof("Removed kubernetesService %s", svcName)
 
 	return nil
 }
@@ -142,6 +148,8 @@ func (h *ServiceHandler) createKubernetesReplicationController(service *types.Se
 			return err
 		}
 	}
+	log.Infof("Removed kubernetesReplicationController %s", svcName)
+
 	return nil
 }
 
