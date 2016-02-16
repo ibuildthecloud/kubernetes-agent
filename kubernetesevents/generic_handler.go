@@ -13,7 +13,6 @@ import (
 	"github.com/rancher/kubernetes-model/model"
 )
 
-const RCKind string = "replicationcontrollers"
 const ServiceKind string = "services"
 const eventTypePrefix string = "service."
 
@@ -43,17 +42,7 @@ func (h *GenericHandler) Handle(event model.WatchEvent) error {
 		var kind string
 		var selector map[string]interface{}
 		var clusterIp string
-		if h.kindHandled == RCKind {
-			var rc model.ReplicationController
-			mapstructure.Decode(i, &rc)
-			if rc == (model.ReplicationController{}) || rc.Spec == nil {
-				log.Infof("Couldn't decode %+v to rc.", i)
-				return nil
-			}
-			kind = rc.Kind
-			selector = rc.Spec.Selector
-			metadata = rc.Metadata
-		} else if h.kindHandled == ServiceKind {
+		if h.kindHandled == ServiceKind {
 			var svc model.Service
 			mapstructure.Decode(i, &svc)
 			if svc == (model.Service{}) || svc.Spec == nil {

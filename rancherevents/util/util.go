@@ -55,30 +55,6 @@ func ConvertRancherToKubernetesService(service *types.Service) (model.Service, e
 	return kService, nil
 }
 
-func ConvertRancherToKubernetesReplicationController(service *types.Service) (model.ReplicationController, error) {
-	var rc model.ReplicationController
-	m, _ := json.Marshal(service.Data.Fields.Template)
-	if err := json.Unmarshal(m, &rc); err != nil {
-		return rc, err
-	}
-
-	if rc.Metadata == nil {
-		rc.Metadata = &model.ObjectMeta{}
-	}
-
-	if rc.Metadata.Name == "" {
-		rc.Metadata.Name = service.Name
-	}
-
-	if rc.Metadata.Labels == nil {
-		rc.Metadata.Labels = make(map[string]interface{})
-	}
-
-	rc.Metadata.Labels["io.rancher.uuid"] = service.UUID
-
-	return rc, nil
-}
-
 func GetRancherService(event *revents.Event) (types.Service, error) {
 	var service types.Service
 
