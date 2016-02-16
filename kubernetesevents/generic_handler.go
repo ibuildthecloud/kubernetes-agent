@@ -42,6 +42,7 @@ func (h *GenericHandler) Handle(event model.WatchEvent) error {
 		var metadata *model.ObjectMeta
 		var kind string
 		var selector map[string]interface{}
+		var clusterIp string
 		if h.kindHandled == RCKind {
 			var rc model.ReplicationController
 			mapstructure.Decode(i, &rc)
@@ -62,6 +63,7 @@ func (h *GenericHandler) Handle(event model.WatchEvent) error {
 			kind = svc.Kind
 			selector = svc.Spec.Selector
 			metadata = svc.Metadata
+			clusterIp = svc.Spec.ClusterIP
 		} else {
 			return fmt.Errorf("Unrecognized handled kind [%s].", h.kindHandled)
 		}
@@ -76,7 +78,7 @@ func (h *GenericHandler) Handle(event model.WatchEvent) error {
 			fallthrough
 
 		case "ADDED":
-			err := h.add(selector, metadata, event, serviceEvent, constructResourceType(kind))
+			err := h.add(selector, metadata, clusterIp, event, serviceEvent, constructResourceType(kind))
 			if err != nil {
 				return err
 			}
@@ -97,7 +99,7 @@ func (h *GenericHandler) Handle(event model.WatchEvent) error {
 	return fmt.Errorf("Couldn't decode event [%#v]", event)
 }
 
-func (h *GenericHandler) add(selectorMap map[string]interface{}, metadata *model.ObjectMeta, event model.WatchEvent, serviceEvent *client.ExternalServiceEvent, kind string) error {
+func (h *GenericHandler) add(selectorMap map[string]interface{}, metadata *model.ObjectMeta, clusterIp string, event model.WatchEvent, serviceEvent *client.ExternalServiceEvent, kind string) error {
 	var buffer bytes.Buffer
 	for key, v := range selectorMap {
 		if val, ok := v.(string); ok {
@@ -122,6 +124,7 @@ func (h *GenericHandler) add(selectorMap map[string]interface{}, metadata *model
 		SelectorContainer: selector,
 		Data:              data,
 		Uuid:              rancherUuid,
+		Vip:               clusterIp,
 	}
 	serviceEvent.Service = service
 

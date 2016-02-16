@@ -42,25 +42,6 @@ func (h *ServiceHandler) updateKubernetesService(service *types.Service) error {
 	return nil
 }
 
-func (h *ServiceHandler) updateKubernetesReplicationController(service *types.Service) error {
-	toUpdate, err := util.ConvertRancherToKubernetesReplicationController(service)
-	if err != nil {
-		return err
-	}
-
-	svcName := toUpdate.Metadata.Name
-	existing, err := h.kClient.ReplicationController.ByName(service.Stack.Name, svcName)
-	toUpdate.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-	if err == nil {
-		if _, err = h.kClient.ReplicationController.ReplaceReplicationController(service.Stack.Name, &toUpdate); err != nil {
-			return err
-		}
-	}
-	log.Infof("Updated kubernetesReplicationController %s", svcName)
-
-	return nil
-}
-
 func (h *ServiceHandler) removeKubernetesService(service *types.Service) error {
 
 	kService, err := util.ConvertRancherToKubernetesService(service)
@@ -81,23 +62,6 @@ func (h *ServiceHandler) removeKubernetesService(service *types.Service) error {
 		}
 	}
 	log.Infof("Removed kubernetesService %s", svcName)
-	return nil
-}
-
-func (h *ServiceHandler) removeKubernetesReplicationController(service *types.Service) error {
-	_, err := h.kClient.ReplicationController.ByName(service.Stack.Name, service.Name)
-
-	if err == nil {
-		status, err := h.kClient.ReplicationController.DeleteReplicationController(service.Stack.Name, service.Name)
-		if err != nil {
-			return err
-		}
-		if status.Code != 200 {
-			return fmt.Errorf("Failed to remove kubernetesReplicationController %s; response code %v", service.Name, status.Code)
-		}
-	}
-	log.Infof("Removed kubernetesReplicationController %s", service.Name)
-
 	return nil
 }
 
@@ -135,24 +99,6 @@ func (h *ServiceHandler) createKubernetesService(service *types.Service) error {
 	return nil
 }
 
-func (h *ServiceHandler) createKubernetesReplicationController(service *types.Service) error {
-	rc, err := util.ConvertRancherToKubernetesReplicationController(service)
-	if err != nil {
-		return err
-	}
-
-	svcName := rc.Metadata.Name
-	_, err = h.kClient.ReplicationController.ByName(service.Stack.Name, svcName)
-	if err != nil {
-		if _, err = h.kClient.ReplicationController.CreateReplicationController(service.Stack.Name, &rc); err != nil {
-			return err
-		}
-	}
-	log.Infof("Removed kubernetesReplicationController %s", svcName)
-
-	return nil
-}
-
 func (h *ServiceHandler) Handler(event *revents.Event, cli *client.RancherClient) error {
 	log.Infof("Received event: Name: %s, Event Id: %s, Resource Id: %s", event.Name, event.Id, event.ResourceId)
 	if util.IsNoOp(event) {
@@ -183,21 +129,8 @@ func (h *ServiceHandler) Handler(event *revents.Event, cli *client.RancherClient
 					return err
 				}
 			}
-
-		} else if strings.ToLower(service.Kind) == "kubernetesreplicationcontroller" {
-			if event.Name == "service.create" {
-				if err = h.createKubernetesReplicationController(&service); err != nil {
-					return err
-				}
-			} else if event.Name == "service.update" {
-				if err = h.updateKubernetesReplicationController(&service); err != nil {
-					return err
-				}
-			} else if event.Name == "service.remove" {
-				if err = h.removeKubernetesReplicationController(&service); err != nil {
-					return err
-				}
-			}
+		} else {
+			log.Infof("Not processing event for service kind %s", service.Kind)
 		}
 	}
 
