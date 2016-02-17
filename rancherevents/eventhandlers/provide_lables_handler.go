@@ -25,11 +25,7 @@ func (h *syncHandler) Handler(event *revents.Event, cli *client.RancherClient) e
 
 	namespace, name := h.getPod(event)
 	if namespace == "" || name == "" {
-		reply := util.NewReply(event)
-		reply.ResourceType = event.ResourceType
-		reply.ResourceId = event.ResourceId
-		err := util.PublishReply(reply, cli)
-		if err != nil {
+		if err := util.CreateAndPublishReply(event, cli); err != nil {
 			return err
 		}
 		return nil
@@ -39,11 +35,7 @@ func (h *syncHandler) Handler(event *revents.Event, cli *client.RancherClient) e
 	if err != nil {
 		log.Warnf("Error looking up pod: %#v", err)
 		if apiErr, ok := err.(*client.ApiError); ok && apiErr.StatusCode == 404 {
-			reply := util.NewReply(event)
-			reply.ResourceType = event.ResourceType
-			reply.ResourceId = event.ResourceId
-			err := util.PublishReply(reply, cli)
-			if err != nil {
+			if err := util.CreateAndPublishReply(event, cli); err != nil {
 				return err
 			}
 			return nil

@@ -14,12 +14,7 @@ func NewPingHandler() *PingHandler {
 }
 
 func (h *PingHandler) Handler(event *revents.Event, cli *client.RancherClient) error {
-	reply := util.NewReply(event)
-	if reply.Name == "" {
-		return nil
-	}
-	err := util.PublishReply(reply, cli)
-	if err != nil {
+	if err := util.CreateAndPublishReply(event, cli); err != nil {
 		return err
 	}
 	return nil

@@ -43,8 +43,7 @@ func (s *GenerichandlerTestSuite) SetUpSuite(c *check.C) {
 	}
 
 	svcHandler := NewHandler(mockRancherClient, s.kClient, ServiceKind)
-	rcHandler := NewHandler(mockRancherClient, s.kClient, RCKind)
-	handlers := []Handler{svcHandler, rcHandler}
+	handlers := []Handler{svcHandler}
 	go ConnectToEventStream(handlers, conf)
 	time.Sleep(time.Second)
 }
